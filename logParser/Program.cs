@@ -39,7 +39,7 @@ class Program
             }
             else
             {
-                Save(parsed, Path.ChangeExtension(filePath, ".csv"));
+                Save(parsed, Path.ChangeExtension(filePath, ".agg.csv"));
             }
         }
         catch (Exception ex)
@@ -53,38 +53,45 @@ class Program
 
     private static Dictionary<DateTime, Dictionary<string, int>> Parse(string filePath)
     {
+        var parsedPath = Path.ChangeExtension(filePath, "parsed.csv");
         var result = new Dictionary<DateTime, Dictionary<string, int>>();
 
         string pattern = @"^(?<date>\d{4}/\d{2}/\d{2}-\d{2}:\d{2}:\d{2})\s+\[[^\]]+\]\s+(?<event>.+)$";
         Console.WriteLine($"Начинаю обработку");
-        foreach (var line in File.ReadLines(filePath))
+        using (var writer = new StreamWriter(parsedPath, false, Encoding.UTF8))
         {
-            Match match = Regex.Match(line, pattern);
-            if (match.Success)
+            writer.WriteLine("Дата;Время;Событие");
+            foreach (var line in File.ReadLines(filePath))
             {
-                string dateString = match.Groups["date"].Value;
-                string eventText = match.Groups["event"].Value;
-                if (DateTime.TryParseExact(dateString,
-                                "yyyy/MM/dd-HH:mm:ss",
-                                CultureInfo.InvariantCulture,
-                                DateTimeStyles.None,
-                                out DateTime date))
+                Match match = Regex.Match(line, pattern);
+                if (match.Success)
                 {
-                    date = date.Date;
-                    if (!result.ContainsKey(date))
+                    string dateString = match.Groups["date"].Value;
+                    string eventText = match.Groups["event"].Value;
+                    if (DateTime.TryParseExact(dateString,
+                                    "yyyy/MM/dd-HH:mm:ss",
+                                    CultureInfo.InvariantCulture,
+                                    DateTimeStyles.None,
+                                    out DateTime date))
                     {
-                        result.Add(date, new Dictionary<string, int>());
-                    }
-                    var eventsDict = result[date];
-                    if (!eventsDict.ContainsKey(eventText)) {
-                        eventsDict.Add(eventText, 0);
-                    }
+                        writer.WriteLine($"\"{date.ToString("yyyy-MM-dd")}\";\"{date.ToString("HH:mm")}\";{eventText}");
+                        date = date.Date;
+                        if (!result.ContainsKey(date))
+                        {
+                            result.Add(date, new Dictionary<string, int>());
+                        }
+                        var eventsDict = result[date];
+                        if (!eventsDict.ContainsKey(eventText))
+                        {
+                            eventsDict.Add(eventText, 0);
+                        }
 
-                    eventsDict[eventText]++;
-                }
-                else
-                {
-                    Console.WriteLine($"Ошибка парса даты {dateString} в формат yyyy/MM/dd-HH:mm:ss");
+                        eventsDict[eventText]++;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Ошибка парса даты {dateString} в формат yyyy/MM/dd-HH:mm:ss");
+                    }
                 }
             }
         }
