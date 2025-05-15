@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using logParser;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -8,7 +9,7 @@ class Program
     {
         Console.WriteLine("Перетащите текстовый файл на этот исполняемый файл для его открытия.");
         // For testing
-        //if (args.Length == 0) 
+        //if (args.Length == 0)
         //{
         //    args = new string[] { @"Z:\FreemDocuments\log parser Игорь\log2.txt" };
         //}
@@ -51,10 +52,10 @@ class Program
         Console.ReadKey();
     }
 
-    private static Dictionary<DateTime, Dictionary<string, int>> Parse(string filePath)
+    private static Dictionary<DateTime, Dictionary<string, DataRow>> Parse(string filePath)
     {
         var parsedPath = Path.ChangeExtension(filePath, "parsed.csv");
-        var result = new Dictionary<DateTime, Dictionary<string, int>>();
+        var result = new Dictionary<DateTime, Dictionary<string, DataRow>>();
 
         string pattern = @"^(?<date>\d{4}/\d{2}/\d{2}-\d{2}:\d{2}:\d{2})\s+\[[^\]]+\]\s+(?<event>.+)$";
         Console.WriteLine($"Начинаю обработку");
@@ -72,21 +73,22 @@ class Program
                                     "yyyy/MM/dd-HH:mm:ss",
                                     CultureInfo.InvariantCulture,
                                     DateTimeStyles.None,
-                                    out DateTime date))
+                                    out DateTime dateTime))
                     {
-                        writer.WriteLine($"\"{date.ToString("yyyy-MM-dd")}\";\"{date.ToString("HH:mm")}\";{eventText}");
-                        date = date.Date;
+                        writer.WriteLine($"\"{dateTime.ToString("yyyy-MM-dd")}\";\"{dateTime.ToString("HH:mm")}\";{eventText}");
+                        var date = dateTime.Date;
                         if (!result.ContainsKey(date))
                         {
-                            result.Add(date, new Dictionary<string, int>());
+                            result.Add(date, new Dictionary<string, DataRow>());
                         }
                         var eventsDict = result[date];
                         if (!eventsDict.ContainsKey(eventText))
                         {
-                            eventsDict.Add(eventText, 0);
+                            eventsDict.Add(eventText, new DataRow());
                         }
 
-                        eventsDict[eventText]++;
+                        eventsDict[eventText].Count++;
+                        eventsDict[eventText].Times.Add(dateTime.TimeOfDay);
                     }
                     else
                     {
@@ -95,24 +97,24 @@ class Program
                 }
             }
         }
+        Console.WriteLine($"Распарсенный лог сохранен в файл: {parsedPath}");
         return result;
     }
 
-    private static void Save(Dictionary<DateTime, Dictionary<string, int>> data, string savePath)
+    private static void Save(Dictionary<DateTime, Dictionary<string, DataRow>> data, string savePath)
     {
-        Console.WriteLine("Сохраняю результат...");
         try
         {
             using (var writer = new StreamWriter(savePath, false, Encoding.UTF8))
             {
                 // Записываем заголовки
-                writer.WriteLine("Дата;Событие;Количество событий");
+                writer.WriteLine("Дата;Время;Событие;Количество событий");
 
                 // Проходим по всем элементам словаря
                 foreach (var dateEntry in data)
                 {
                     DateTime date = dateEntry.Key;
-                    Dictionary<string, int> events = dateEntry.Value;
+                    Dictionary<string, DataRow> events = dateEntry.Value;
 
                     // Если для даты нет событий, записываем только дату
                     if (events == null || events.Count == 0)
@@ -125,18 +127,17 @@ class Program
                     foreach (var eventEntry in events)
                     {
                         string eventName = eventEntry.Key;
-                        int count = eventEntry.Value;
 
                         // Экранируем кавычки в названии события
                         eventName = eventName.Replace("\"", "\"\"");
 
                         // Форматируем строку для CSV
-                        writer.WriteLine($"\"{date.ToString("yyyy-MM-dd")}\";\"{eventName}\";{count}");
+                        writer.WriteLine($"\"{date.ToString("yyyy-MM-dd")}\";\"{string.Join("; ", eventEntry.Value.Times.Distinct().Select(t => t.ToString("hh\\:mm")))}\";\"{eventName}\";{eventEntry.Value.Count}");
                     }
                 }
             }
 
-            Console.WriteLine($"Данные успешно сохранены в файл: {savePath}");
+            Console.WriteLine($"Сгруппированные данные сохранены в файл: {savePath}");
         }
         catch (Exception ex)
         {
